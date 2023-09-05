@@ -175,6 +175,12 @@ class BaldinofRoadRunnerExtension extends Extension
             $middlewares[] = DoctrineORMMiddleware::class;
         }
 
+        if(function_exists("xhprof_enable")) {
+            $container
+                ->register(XHProfMiddleware::class)
+                ->setAutoconfigured(true)
+            ;
+        }
 
         $container->setParameter('baldinof_road_runner.middlewares.default', $middlewares);
     }
