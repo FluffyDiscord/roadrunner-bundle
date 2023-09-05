@@ -31,4 +31,9 @@ final class SentryMiddleware implements MiddlewareInterface
             $this->hub->popScope();
         }
     }
+
+    public static function getPriority(): int
+    {
+        return 2000;
+    }
 }

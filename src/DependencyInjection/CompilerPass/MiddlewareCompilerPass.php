@@ -22,17 +22,14 @@ class MiddlewareCompilerPass implements CompilerPassInterface
 
         $stack = $container->getDefinition(MiddlewareStack::class);
 
-        /** @var string[] */
-        $middlewares = $container->getParameter('baldinof_road_runner.middlewares');
-        /** @var array{before: string[], after: string[]} */
-        $defaultMiddlewares = $container->getParameter('baldinof_road_runner.middlewares.default');
+        $middlewares = [
+            ...$container->getParameter('baldinof_road_runner.middlewares'),
+            ...$container->getParameter('baldinof_road_runner.middlewares.default'),
+        ];
 
-        $middlewaresToRemove = [];
+        uasort($middlewares, static fn(string $a, string $b) => $a::getPriority() - $b::getPriority());
 
-        $beforeMiddlewares = array_diff($defaultMiddlewares['before'], $middlewaresToRemove);
-        $afterMiddlewares = array_diff($defaultMiddlewares['after'], $middlewaresToRemove);
-
-        foreach (array_merge($beforeMiddlewares, $middlewares, $afterMiddlewares) as $m) {
+        foreach ($middlewares as $m) {
             if (!$container->has($m)) {
                 throw new LogicException("No service found for middleware '$m'.");
             }

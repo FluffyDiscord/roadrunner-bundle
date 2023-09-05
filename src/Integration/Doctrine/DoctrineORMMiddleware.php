@@ -99,4 +99,9 @@ final class DoctrineORMMiddleware implements MiddlewareInterface
             return false;
         }
     }
+
+    public static function getPriority(): int
+    {
+        return 1000;
+    }
 }

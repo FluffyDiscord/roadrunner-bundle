@@ -30,4 +30,12 @@ interface MiddlewareInterface
      * @return \Iterator<Response> Only the first item will be sent to the client
      */
     public function process(Request $request, HttpKernelInterface $next): \Iterator;
+
+    /**
+     * Highest priority middleware runs first before handling the request,
+     * then last after sending the response back
+     *
+     * @return int
+     */
+    public static function getPriority(): int;
 }

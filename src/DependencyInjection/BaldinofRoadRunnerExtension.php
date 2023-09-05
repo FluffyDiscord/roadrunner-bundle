@@ -117,11 +117,10 @@ class BaldinofRoadRunnerExtension extends Extension
 
     private function loadIntegrations(ContainerBuilder $container, array $config): void
     {
-        $beforeMiddlewares = [];
-        $lastMiddlewares = [];
+        $middlewares = [];
 
         if (!$config['default_integrations']) {
-            $container->setParameter('baldinof_road_runner.middlewares.default', ['before' => $beforeMiddlewares, 'after' => $lastMiddlewares]);
+            $container->setParameter('baldinof_road_runner.middlewares.default', $middlewares);
 
             return;
         }
@@ -131,7 +130,7 @@ class BaldinofRoadRunnerExtension extends Extension
 
         if (class_exists(\BlackfireProbe::class)) {
             $container->register(BlackfireMiddleware::class);
-            $beforeMiddlewares[] = BlackfireMiddleware::class;
+            $middlewares[] = BlackfireMiddleware::class;
         }
 
         if (isset($bundles['SentryBundle'])) {
@@ -152,7 +151,7 @@ class BaldinofRoadRunnerExtension extends Extension
                     new Reference(HubInterface::class),
                 ]);
 
-            $beforeMiddlewares[] = SentryMiddleware::class;
+            $middlewares[] = SentryMiddleware::class;
         }
 
         if (isset($bundles['DoctrineMongoDBBundle'])) {
@@ -172,10 +171,11 @@ class BaldinofRoadRunnerExtension extends Extension
                 ->addTag('monolog.logger', ['channel' => self::MONOLOG_CHANNEL])
             ;
 
-            $beforeMiddlewares[] = DoctrineORMMiddleware::class;
+            $middlewares[] = DoctrineORMMiddleware::class;
         }
 
         $container->setParameter('baldinof_road_runner.middlewares.default', ['before' => $beforeMiddlewares, 'after' => $lastMiddlewares]);
+        $container->setParameter('baldinof_road_runner.middlewares.default', $middlewares);
     }
 
     private function configureMetrics(array $config, ContainerBuilder $container): void

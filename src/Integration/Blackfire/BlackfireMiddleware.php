@@ -36,4 +36,9 @@ final class BlackfireMiddleware implements MiddlewareInterface
 
         yield $response;
     }
+
+    public static function getPriority(): int
+    {
+        return 1500;
+    }
 }
