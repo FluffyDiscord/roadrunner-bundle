@@ -13,6 +13,7 @@ use Baldinof\RoadRunnerBundle\Integration\Sentry\SentryListener;
 use Baldinof\RoadRunnerBundle\Integration\Sentry\SentryMiddleware;
 use Baldinof\RoadRunnerBundle\Integration\Sentry\SentryTracingRequestListenerDecorator;
 use Baldinof\RoadRunnerBundle\Integration\Symfony\ConfigureVarDumperListener;
+use Baldinof\RoadRunnerBundle\Integration\XHProf\XHProfMiddleware;
 use Baldinof\RoadRunnerBundle\Reboot\AlwaysRebootStrategy;
 use Baldinof\RoadRunnerBundle\Reboot\ChainRebootStrategy;
 use Baldinof\RoadRunnerBundle\Reboot\KernelRebootStrategyInterface;
@@ -174,7 +175,7 @@ class BaldinofRoadRunnerExtension extends Extension
             $middlewares[] = DoctrineORMMiddleware::class;
         }
 
-        $container->setParameter('baldinof_road_runner.middlewares.default', ['before' => $beforeMiddlewares, 'after' => $lastMiddlewares]);
+
         $container->setParameter('baldinof_road_runner.middlewares.default', $middlewares);
     }
 
