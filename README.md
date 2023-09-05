@@ -192,6 +192,14 @@ class YouController
 }
 ```
 
+## xhprof
+
+There is build in `xhprof` support using `Baldinof\RoadRunnerBundle\Integration\XHProf\XHProfMiddleware`.
+It requires to have installed and enabled [xhprof](https://github.com/longxinH/xhprof) PHP extension
+and running [buggregator](https://github.com/buggregator/server#1-xhprof-profiler) instance 
+and setting `XHPROF_URL` environment variable pointing to the buggregator's profiler endpoint, for example `http://profiler@buggregator:8000` 
+
+
 ## gRPC
 
 gRPC support was added by the roadrunner-grpc plugin for RoadRunner 2 (https://github.com/spiral/roadrunner-grpc).
