@@ -116,7 +116,7 @@ final class HttpFoundationWorker implements HttpFoundationWorkerInterface
         $server = $this->originalServer;
         $components = parse_url($request->uri);
 
-        $components["scheme"] = $request->headers["X-Forwarded-Scheme"] ?? $components["scheme"] ?? null;
+        $components["scheme"] = $request->headers["X-Forwarded-Scheme"][0] ?? $components["scheme"] ?? null;
 
         if ($components === false) {
             throw new \Exception('Failed to parse RoadRunner request URI');
