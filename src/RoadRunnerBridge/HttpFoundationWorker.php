@@ -4,31 +4,27 @@ declare(strict_types=1);
 
 namespace Baldinof\RoadRunnerBundle\RoadRunnerBridge;
 
-use Baldinof\RoadRunnerBundle\Exception\MissingHttpMiddlewareException;
-use Baldinof\RoadRunnerBundle\Exception\StreamedResponseNotSupportedException;
-use Baldinof\RoadRunnerBundle\Exception\UnableToReadFileException;
-use Baldinof\RoadRunnerBundle\Helpers\RoadRunnerConfig;
-use Baldinof\RoadRunnerBundle\Response\NonStreamableBinaryFileResponse;
-use Baldinof\RoadRunnerBundle\Response\StreamableFileResponse;
+use Baldinof\RoadRunnerBundle\Helpers\StreamedJsonResponseHelper;
 use Spiral\RoadRunner\Http\HttpWorkerInterface;
 use Spiral\RoadRunner\Http\Request as RoadRunnerRequest;
 use Spiral\RoadRunner\WorkerInterface;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
+use Symfony\Component\HttpFoundation\StreamedJsonResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 final class HttpFoundationWorker implements HttpFoundationWorkerInterface
 {
     private HttpWorkerInterface $httpWorker;
-    private RoadRunnerConfig $roadRunnerConfig;
     private array $originalServer;
 
-    public function __construct(HttpWorkerInterface $httpWorker, RoadRunnerConfig $roadRunnerConfig)
+    public function __construct(HttpWorkerInterface $httpWorker)
     {
         $this->httpWorker = $httpWorker;
-        $this->roadRunnerConfig = $roadRunnerConfig;
         $this->originalServer = $_SERVER;
     }
 
@@ -45,44 +41,16 @@ final class HttpFoundationWorker implements HttpFoundationWorkerInterface
 
     public function respond(SymfonyResponse $response): void
     {
-        if ($response instanceof StreamedResponse) {
-            throw new StreamedResponseNotSupportedException($response, $this->roadRunnerConfig->isHttpMiddlewareEnabled(RoadRunnerConfig::HTTP_MIDDLEWARE_SENDFILE));
-        }
-
-        $content = '';
-        if ($response instanceof NonStreamableBinaryFileResponse) {
-            if ($response->headers->has('x-sendfile')) {
-                $response->headers->remove('x-sendfile');
-            }
-
-            if (!$response->headers->has('Content-Range')) {
-                $content = file_get_contents($response->getFile()->getPathname());
-                if ($content === false) {
-                    throw new UnableToReadFileException($response);
-                }
-            } else {
-                ob_start(function ($buffer) use (&$content) {
-                    $content .= $buffer;
-
-                    return '';
-                });
-
-                $response->sendContent();
-                ob_end_clean();
-            }
-        } elseif ($response instanceof BinaryFileResponse) {
-            if (!$this->roadRunnerConfig->isHttpMiddlewareEnabled(RoadRunnerConfig::HTTP_MIDDLEWARE_SENDFILE)) {
-                throw new MissingHttpMiddlewareException(sprintf("You need to enable '%s' http middleware in order to send '%s'. If you do not want to enable this middleware, use '%s' as fallback", RoadRunnerConfig::HTTP_MIDDLEWARE_SENDFILE, $response::class, NonStreamableBinaryFileResponse::class));
-            }
-
-            $response = StreamableFileResponse::fromBinaryFileResponse($response);
-        } else {
-            $content = (string) $response->getContent();
-        }
+        $content = match (true) {
+            $response instanceof StreamedJsonResponse => $this->createStreamedJsonResponseGenerator($response),
+            $response instanceof StreamedResponse => $this->createStreamedResponseGenerator($response),
+            $response instanceof BinaryFileResponse => $this->createFileStreamGenerator($response),
+            default => $this->createDefaultContentGetter($response),
+        };
 
         $headers = $this->stringifyHeaders($response->headers->all());
 
-        $this->httpWorker->respond($response->getStatusCode(), $content, $headers);
+        $this->httpWorker->respond($response->getStatusCode(), $content(), $headers);
     }
 
     public function getWorker(): WorkerInterface
@@ -135,7 +103,7 @@ final class HttpFoundationWorker implements HttpFoundationWorkerInterface
         $server['REQUEST_URI'] = $components['path'] ?? '';
         if (isset($components['query']) && $components['query'] !== '') {
             $server['QUERY_STRING'] = $components['query'];
-            $server['REQUEST_URI'] .= '?'.$components['query'];
+            $server['REQUEST_URI'] .= '?' . $components['query'];
         }
 
         if (isset($components['scheme']) && $components['scheme'] === 'https') {
@@ -154,7 +122,7 @@ final class HttpFoundationWorker implements HttpFoundationWorkerInterface
             if (\in_array($key, ['CONTENT_TYPE', 'CONTENT_LENGTH'])) {
                 $server[$key] = implode(', ', $value);
             } else {
-                $server['HTTP_'.$key] = implode(', ', $value);
+                $server['HTTP_' . $key] = implode(', ', $value);
             }
         }
 
@@ -211,7 +179,127 @@ final class HttpFoundationWorker implements HttpFoundationWorkerInterface
     private function stringifyHeaders(array $headers): array
     {
         return array_map(static function ($headerValues) {
-            return array_map(static fn ($val) => (string) $val, (array) $headerValues);
+            return array_map(static fn($val) => (string)$val, (array)$headerValues);
         }, $headers);
+    }
+
+    /**
+     * Basically a copy of BinaryFileResponse->sendContent()
+     * @param BinaryFileResponse $response
+     * @return \Closure
+     */
+    private function createFileStreamGenerator(BinaryFileResponse $response): \Closure
+    {
+        return static function () use ($response) {
+            $ref = new \ReflectionClass($response);
+            $maxlen = $ref->getProperty("maxlen")->getValue($response);
+            $offset = $ref->getProperty("offset")->getValue($response);
+            $chunkSize = $ref->getProperty("chunkSize")->getValue($response);
+            $deleteFileAfterSend = $ref->getProperty("deleteFileAfterSend")->getValue($response);
+
+            try {
+                if (!$response->isSuccessful()) {
+                    return;
+                }
+
+                $file = fopen($response->getFile()->getPathname(), "r");
+
+                ignore_user_abort(true);
+
+                if ($maxlen === 0) {
+                    return;
+                }
+
+                if ($offset !== 0) {
+                    fseek($file, $offset);
+                }
+
+                $length = $maxlen;
+                while ($length && !feof($file)) {
+                    $read = $length > $chunkSize || 0 > $length ? $chunkSize : $length;
+
+                    if (false === $data = fread($file, $read)) {
+                        break;
+                    }
+
+                    while ('' !== $data) {
+                        yield $data;
+
+                        if (0 < $length) {
+                            $length -= $read;
+                        }
+                        $data = substr($data, $read);
+                    }
+                }
+
+                fclose($file);
+            } finally {
+                if ($deleteFileAfterSend && is_file($response->getFile()->getPathname())) {
+                    unlink($response->getFile()->getPathname());
+                }
+            }
+        };
+    }
+
+    /**
+     * @param SymfonyResponse $response
+     * @return \Closure
+     */
+    private function createDefaultContentGetter(SymfonyResponse $response): \Closure
+    {
+        return static function () use ($response) {
+            ob_start();
+            $response->sendContent();
+            return ob_get_clean();
+        };
+    }
+
+    /**
+     * StreamedResponse callback can now use `yield` to be really streamed
+     * @param StreamedResponse $response
+     * @return \Closure
+     */
+    private function createStreamedResponseGenerator(StreamedResponse $response): \Closure
+    {
+        return function () use ($response): \Generator {
+            $kernelCallback = $response->getCallback();
+
+            $kernelCallbackRef = new \ReflectionFunction($kernelCallback);
+            $closureVars = $kernelCallbackRef->getClosureUsedVariables();
+
+            $ref = new \ReflectionFunction($closureVars["callback"]);
+            if ($ref->isGenerator()) {
+                $request = $closureVars["request"];
+                assert($request instanceof Request);
+
+                $requestStack = $closureVars["requestStack"];
+                assert($requestStack instanceof RequestStack);
+
+                try {
+                    $requestStack->push($request);
+
+                    foreach ($closureVars["callback"]() as $output) {
+                        yield $output;
+                    }
+                } finally {
+                    $requestStack->pop();
+                }
+
+                return;
+            }
+
+            yield $this->createDefaultContentGetter($response)();
+        };
+    }
+
+    /**
+     * @param StreamedJsonResponse $response
+     * @return \Closure
+     */
+    private function createStreamedJsonResponseGenerator(StreamedJsonResponse $response): \Closure
+    {
+        return static function () use ($response) {
+            return StreamedJsonResponseHelper::toGenerator($response);
+        };
     }
 }

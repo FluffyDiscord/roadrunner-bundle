@@ -4,10 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Baldinof\RoadRunnerBundle\RoadRunnerBridge;
 
-use Baldinof\RoadRunnerBundle\Exception\StreamedResponseNotSupportedException;
 use Baldinof\RoadRunnerBundle\Helpers\RoadRunnerConfig;
-use Baldinof\RoadRunnerBundle\Response\NonStreamableBinaryFileResponse;
-use Baldinof\RoadRunnerBundle\Response\StreamableFileResponse;
 use Baldinof\RoadRunnerBundle\RoadRunnerBridge\HttpFoundationWorker;
 use org\bovigo\vfs\vfsStream;
 use org\bovigo\vfs\vfsStreamDirectory;
@@ -46,7 +43,7 @@ class HttpFoundationWorkerTest extends TestCase
 
         $_ENV['RR_CONFIG_NAME'] = '.rr.dev.yaml'; // load example dev yaml
 
-        $worker = new HttpFoundationWorker($innerWorker, new RoadRunnerConfig(__DIR__.'/../..'));
+        $worker = new HttpFoundationWorker($innerWorker);
         $symfonyRequest = $worker->waitRequest();
 
         $expectations($symfonyRequest);
@@ -165,9 +162,7 @@ class HttpFoundationWorkerTest extends TestCase
 
         $innerWorker = new MockWorker();
 
-        $_ENV['RR_CONFIG_NAME'] = '.rr.dev.yaml'; // load example dev yaml
-
-        $worker = new HttpFoundationWorker($innerWorker, new RoadRunnerConfig(__DIR__.'/../..'));
+        $worker = new HttpFoundationWorker($innerWorker);
 
         try {
             $worker->respond($sfResponse);
@@ -305,9 +300,7 @@ class HttpFoundationWorkerTest extends TestCase
         $innerWorker = new MockWorker();
         $innerWorker->nextRequest = $rrRequest;
 
-        $_ENV['RR_CONFIG_NAME'] = '.rr.dev.yaml'; // load example dev yaml
-
-        $worker = new HttpFoundationWorker($innerWorker, new RoadRunnerConfig(__DIR__.'/../..'));
+        $worker = new HttpFoundationWorker($innerWorker);
         $symfonyRequest = $worker->waitRequest();
 
         $this->assertSame('10.0.0.2', $symfonyRequest->server->get('REMOTE_ADDR'));

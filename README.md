@@ -111,6 +111,9 @@ baldinof_road_runner:
       max_jobs_dispersion: 0.2
 ```
 
+## StreamedResponse
+
+`$callback` should now return `\Generator` to be really streamed. Replace all `echo` (etc) with `yield`. Fallback simply loads all content to memory!
 
 ## Events
 
@@ -120,17 +123,6 @@ The following events are dispatched throughout the worker lifecycle:
 - `Baldinof\RoadRunnerBundle\Event\WorkerStopEvent`: Dispatched right before the worker closes.
 - `Baldinof\RoadRunnerBundle\Event\WorkerExceptionEvent`: Dispatched after encountering an uncaught exception during request handling.
 - `Baldinof\RoadRunnerBundle\Event\WorkerKernelRebootedEvent`: Dispatched after the symfony kernel was rebooted (see Kernel reboots).
-
-## Sending/streaming files/content - StreamedResponse, BinaryFileResponse
-Every response needs to be serialized, so we can send it back to RR. 
-Because of that, the `Symfony\Component\HttpFoundation\StreamedResponse` 
-can no longer be used (well, it can, but it makes no sense), because we need to load it's content before passing it to RR.
-If you need to send big files, you have to either use `Symfony\Component\HttpFoundation\BinaryFileResponse`
-or `Baldinof\RoadRunnerBundle\Response\StreamableFileResponse`. The `BinaryFileResponse` is 
-automatically converted to bundle's `StreamableFileResponse`. Files are no longer loaded in memory before sending and 
-and the streaming part is now handled by RR. If you need for any reason to serve files without streaming, use 
-`Baldinof\RoadRunnerBundle\Response\NonStreamableBinaryFileResponse`, but be aware that the whole file content 
-is loaded into memory, so make sure you have set your memory limit high enough.
 
 ## Development mode
 

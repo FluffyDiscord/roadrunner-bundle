@@ -38,6 +38,7 @@
         "symfony/proxy-manager-bridge": "For doctrine re-connection implementation"
     },
     "require-dev": {
+        "ext-xhprof": "*",
         "symfony/var-dumper": "^6.0",
         "sentry/sentry-symfony": "^4.5",
         "symfony/framework-bundle": "^6.0",
